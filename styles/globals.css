@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Existing styles... (add these to your existing globals.css) */
+
+/* Fade in animation for analysis components */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Shimmer effect for argument strength bars */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+/* Fact check indicator hover effects */
+.fact-check-indicator {
+  transition: all 0.2s ease;
+}
+
+.fact-check-indicator:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Argument strength meter animations */
+.strength-meter-fill {
+  transition: width 0.7s ease-out;
+}
+
+/* Tooltip styles */
+.tooltip {
+  position: relative;
+}
+
+.tooltip-content {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 1rem;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  margin-bottom: 0.5rem;
+}
+
+.tooltip:hover .tooltip-content {
+  opacity: 1;
+}
+
+/* Color utilities for dynamic confidence levels */
+.confidence-high {
+  @apply text-red-600 bg-red-50 border-red-200;
+}
+
+.confidence-medium {
+  @apply text-yellow-600 bg-yellow-50 border-yellow-200;
+}
+
+.confidence-low {
+  @apply text-blue-600 bg-blue-50 border-blue-200;
+}
+
+/* Smooth transitions for expandable content */
+.expandable-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out;
+}
+
+.expandable-content.expanded {
+  max-height: 500px;
+  transition: max-height 0.3s ease-in;
+}

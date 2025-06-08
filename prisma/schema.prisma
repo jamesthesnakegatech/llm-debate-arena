@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Debate {
+  id          String   @id @default(cuid())
+  topic       String
+  llm1Name    String
+  llm2Name    String
+  llm1Position String  // "pro" or "con"
+  llm2Position String  // "pro" or "con"
+  status      String   @default("pending") // pending, active, completed
+  winner      String?  // llm1, llm2, or tie
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  turns       Turn[]
+  votes       Vote[]
+  ratingHistory RatingHistory[]
+}
+
+model Turn {
+  id        String   @id @default(cuid())
+  debateId  String
+  llmName   String   // which LLM made this turn
+  message   String
+  turnNumber Int
+  createdAt DateTime @default(now())
+  
+  // New fields for quality analysis
+  argumentStrength    Int?     // 0-100 overall strength score
+  strengthBreakdown   String?  // JSON string storing the breakdown
+  factClaims         String?  // JSON string storing fact check data
+  
+  debate    Debate   @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  
+  @@map("turns")
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  debateId  String
+  judgeId   String   // session ID or user ID
+  winner    String   // llm1, llm2, tie, or bothBad
+  reasoning String?
+  createdAt DateTime @default(now())
+  
+  debate    Debate   @relation(fields: [debateId], references: [id], onDelete: Cascade)
+  
+  @@unique([debateId, judgeId])
+  @@map("votes")
+}
+
+model LLMRating {
+  id        String   @id @default(cuid())
+  llmName   String   @unique
+  rating    Int      @default(1500)
+  wins      Int      @default(0)
+  losses    Int      @default(0)
+  ties      Int      @default(0)
+  totalGames Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RatingHistory {
+  id         String   @id @default(cuid())
+  llmName    String
+  debateId   String
+  opponent   String
+  ratingBefore Int
+  ratingAfter  Int
+  ratingChange Int
+  result     String
+  createdAt  DateTime @default(now())
+  
+  debate     Debate   @relation(fields: [debateId], references: [id])
+}
