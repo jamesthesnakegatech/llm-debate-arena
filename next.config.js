@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   // Custom webpack config for Socket.IO
   webpack: (config, { isServer }) => {
     if (!isServer) {

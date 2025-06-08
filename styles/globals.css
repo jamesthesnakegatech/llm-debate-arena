@@ -2,100 +2,400 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Existing styles... (add these to your existing globals.css) */
-
-/* Fade in animation for analysis components */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+/* Layer for risograph styles to ensure priority */
+@layer base {
+  :root {
+    /* Primary risograph colors */
+    --riso-blue: #0056A0;
+    --riso-pink: #E91E63;
+    --riso-yellow: #FFB300;
+    --riso-green: #00897B;
+    --riso-orange: #FF5722;
+    --riso-purple: #5E35B1;
+    --riso-red: #E53935;
+    
+    /* Background and neutrals */
+    --riso-paper: #FFFBF5;
+    --riso-black: #1A1A1A;
+    --riso-overlay: rgba(255, 72, 176, 0.08);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  
+  * {
+    position: relative;
+    z-index: 1;
+  }
+  
+  body {
+    background-color: var(--riso-paper);
+    color: var(--riso-black);
   }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* Shimmer effect for argument strength bars */
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
+@layer components {
+  /* Risograph Cards with !important for override */
+  .riso-card {
+    @apply bg-white border-4 border-black relative overflow-hidden !important;
   }
-  100% {
-    transform: translateX(100%);
+
+  .riso-card-pink {
+    box-shadow: 
+      -8px 8px 0 var(--riso-pink),
+      -8px 8px 0 1px var(--riso-black) !important;
+  }
+
+  .riso-card-blue {
+    box-shadow: 
+      8px 8px 0 var(--riso-blue),
+      8px 8px 0 1px var(--riso-black) !important;
+  }
+
+  .riso-card-yellow {
+    background: var(--riso-yellow) !important;
+    box-shadow: 
+      8px -8px 0 var(--riso-green),
+      8px -8px 0 1px var(--riso-black) !important;
+  }
+
+  /* Risograph Buttons */
+  .riso-button {
+    @apply px-6 py-3 font-black text-white uppercase tracking-wider transition-all !important;
+    background: var(--riso-blue) !important;
+    border: 3px solid var(--riso-black) !important;
+    box-shadow: 4px 4px 0 var(--riso-black) !important;
+  }
+
+  .riso-button:hover {
+    transform: translate(-2px, -2px) !important;
+    box-shadow: 6px 6px 0 var(--riso-black) !important;
+  }
+
+  /* Risograph Badge */
+  .riso-badge {
+    @apply inline-block px-3 py-1 font-black text-white uppercase text-xs tracking-wider !important;
+    background: var(--riso-orange) !important;
+    border: 2px solid var(--riso-black) !important;
+    transform: rotate(-2deg);
+  }
+
+  /* Header style */
+  .riso-header {
+    background: var(--riso-yellow) !important;
+    border-bottom: 4px solid var(--riso-black) !important;
+    @apply relative overflow-hidden !important;
+  }
+
+  /* Gradient background */
+  .riso-gradient-bg {
+    background-color: var(--riso-paper) !important;
+    background-image: 
+      repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(255, 72, 176, 0.02) 10px,
+        rgba(255, 72, 176, 0.02) 20px
+      ) !important;
+  }
+
+  /* Typography */
+  .riso-misalign {
+    @apply relative !important;
+  }
+
+  .riso-misalign::before {
+    content: attr(data-text);
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    color: var(--riso-pink);
+    opacity: 0.6;
+    z-index: -1;
+  }
+
+  /* Info box */
+  .riso-info-box {
+    background: var(--riso-yellow) !important;
+    @apply border-4 border-black p-6 relative !important;
+    transform: rotate(-1deg);
+  }
+
+  .riso-info-box::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: -8px;
+    bottom: -8px;
+    background: var(--riso-pink);
+    z-index: -1;
   }
 }
 
-.animate-shimmer {
-  animation: shimmer 2s infinite;
+/* Additional overrides */
+.riso-card h1, .riso-card h2, .riso-card h3,
+.riso-card p, .riso-card span {
+  color: var(--riso-black) !important;
 }
 
-/* Fact check indicator hover effects */
-.fact-check-indicator {
-  transition: all 0.2s ease;
+.riso-card-yellow * {
+  color: var(--riso-black) !important;
 }
 
-.fact-check-indicator:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+/* Form elements */
+.riso-select, .riso-input {
+  @apply bg-white border-4 border-black px-4 py-3 font-bold !important;
+  color: var(--riso-black) !important;
 }
 
-/* Argument strength meter animations */
-.strength-meter-fill {
-  transition: width 0.7s ease-out;
+.riso-select:focus, .riso-input:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px var(--riso-pink) !important;
 }
 
-/* Tooltip styles */
-.tooltip {
-  position: relative;
+/* Animations */
+@keyframes riso-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px) rotate(-1deg); }
+  75% { transform: translateX(2px) rotate(1deg); }
 }
 
-.tooltip-content {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.5rem 1rem;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  white-space: nowrap;
-  opacity: 0;
+.riso-shake:hover {
+  animation: riso-shake 0.5s ease-in-out;
+}
+
+/* Additional debate page specific fixes */
+.debate-message .riso-debate-turn {
+  color: var(--riso-black) !important;
+}
+
+.debate-message .riso-debate-turn p,
+.debate-message .riso-debate-turn span {
+  color: var(--riso-black) !important;
+}
+
+/* Fix for debate turn backgrounds */
+.riso-debate-turn[style*="pink"] {
+  background-color: var(--riso-pink) !important;
+  color: var(--riso-black) !important;
+}
+
+.riso-debate-turn[style*="blue"] {
+  background-color: var(--riso-blue) !important;
+  color: white !important;
+}
+
+.riso-debate-turn[style*="blue"] * {
+  color: white !important;
+}
+
+/* Additional debate page specific fixes */
+.debate-message .riso-debate-turn {
+  color: var(--riso-black) !important;
+}
+
+.debate-message .riso-debate-turn p,
+.debate-message .riso-debate-turn span {
+  color: var(--riso-black) !important;
+}
+
+/* Fix for debate turn backgrounds */
+.riso-debate-turn[style*="pink"] {
+  background-color: var(--riso-pink) !important;
+  color: var(--riso-black) !important;
+}
+
+.riso-debate-turn[style*="blue"] {
+  background-color: var(--riso-blue) !important;
+  color: white !important;
+}
+
+.riso-debate-turn[style*="blue"] * {
+  color: white !important;
+}
+
+/* ===== DEBATE PAGE SPECIFIC RISOGRAPH STYLES ===== */
+
+/* Override default debate page styles */
+.min-h-screen:not(.riso-gradient-bg) {
+  background-color: var(--riso-paper) !important;
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      rgba(255, 72, 176, 0.02) 10px,
+      rgba(255, 72, 176, 0.02) 20px
+    ) !important;
+}
+
+/* Debate header section */
+.container .flex.items-center.justify-between {
+  background: var(--riso-yellow) !important;
+  border: 4px solid var(--riso-black) !important;
+  padding: 1.5rem !important;
+  margin-bottom: 1rem !important;
+  box-shadow: 5px 5px 0 var(--riso-pink), 5px 5px 0 1px var(--riso-black) !important;
+}
+
+/* Back button */
+a[href="/"], 
+button:contains("Back to Arena"),
+.text-blue-600 {
+  @apply font-black text-white uppercase !important;
+  background: var(--riso-blue) !important;
+  border: 3px solid var(--riso-black) !important;
+  padding: 0.5rem 1rem !important;
+  box-shadow: 3px 3px 0 var(--riso-black) !important;
+  color: white !important;
+  text-decoration: none !important;
+}
+
+/* Status badges */
+.bg-green-100,
+.bg-yellow-100,
+.bg-gray-100 {
+  background: var(--riso-green) !important;
+  color: white !important;
+  border: 2px solid var(--riso-black) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  transform: rotate(-2deg);
+}
+
+/* Topic header */
+h1:not(.riso-misalign) {
+  @apply text-3xl font-black uppercase !important;
+  color: var(--riso-black) !important;
+}
+
+/* Fighter cards */
+.grid.grid-cols-2 > div {
+  border: 4px solid var(--riso-black) !important;
+  background: white !important;
+}
+
+.grid.grid-cols-2 > div:first-child {
+  background: var(--riso-pink) !important;
+  box-shadow: -5px 5px 0 var(--riso-black) !important;
+  transform: rotate(1deg);
+}
+
+.grid.grid-cols-2 > div:last-child {
+  background: var(--riso-blue) !important;
+  box-shadow: 5px 5px 0 var(--riso-black) !important;
+  transform: rotate(-1deg);
+  color: white !important;
+}
+
+.grid.grid-cols-2 > div:last-child * {
+  color: white !important;
+}
+
+/* Position badges PRO/CON */
+.bg-green-100.text-green-800,
+.bg-orange-100.text-orange-800,
+span:contains("PRO"),
+span:contains("CON") {
+  @apply font-black uppercase !important;
+  background: var(--riso-orange) !important;
+  color: white !important;
+  border: 2px solid var(--riso-black) !important;
+  padding: 0.25rem 0.75rem !important;
+  display: inline-block !important;
+  transform: rotate(-2deg) !important;
+}
+
+/* Debate turns */
+.bg-blue-100,
+.bg-red-100 {
+  background: white !important;
+  border: 4px solid var(--riso-black) !important;
+  padding: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.bg-blue-100 {
+  box-shadow: -8px 8px 0 var(--riso-pink), -8px 8px 0 1px var(--riso-black) !important;
+  transform: rotate(-1deg) !important;
+}
+
+.bg-red-100 {
+  box-shadow: 8px 8px 0 var(--riso-blue), 8px 8px 0 1px var(--riso-black) !important;
+  transform: rotate(1deg) !important;
+}
+
+/* Turn headers */
+.font-semibold.text-blue-900,
+.font-semibold.text-red-900 {
+  @apply font-black uppercase text-xl !important;
+  color: var(--riso-black) !important;
+}
+
+/* Turn numbers */
+.text-sm.text-gray-500 {
+  @apply font-black uppercase !important;
+  background: var(--riso-black) !important;
+  color: white !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 0 !important;
+}
+
+/* Message content */
+.text-gray-800.leading-relaxed {
+  @apply font-medium text-lg !important;
+  color: var(--riso-black) !important;
+}
+
+/* Vote buttons */
+button:not(.riso-button) {
+  @apply font-black uppercase !important;
+  background: var(--riso-blue) !important;
+  color: white !important;
+  border: 3px solid var(--riso-black) !important;
+  padding: 0.75rem 1.5rem !important;
+  box-shadow: 4px 4px 0 var(--riso-black) !important;
+  transition: all 0.2s !important;
+}
+
+button:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 6px 6px 0 var(--riso-black) !important;
+}
+
+/* Add decorative elements */
+body::after {
+  content: '⚡';
+  position: fixed;
+  top: 10%;
+  right: 5%;
+  font-size: 6rem;
+  opacity: 0.1;
+  transform: rotate(15deg);
   pointer-events: none;
-  transition: opacity 0.2s ease;
-  margin-bottom: 0.5rem;
+  z-index: 0;
 }
 
-.tooltip:hover .tooltip-content {
-  opacity: 1;
+body::before {
+  content: '💥';
+  position: fixed;
+  bottom: 10%;
+  left: 5%;
+  font-size: 5rem;
+  opacity: 0.1;
+  transform: rotate(-20deg);
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* Color utilities for dynamic confidence levels */
-.confidence-high {
-  @apply text-red-600 bg-red-50 border-red-200;
+/* Fact check checkboxes */
+input[type="checkbox"] {
+  accent-color: var(--riso-pink) !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
 }
 
-.confidence-medium {
-  @apply text-yellow-600 bg-yellow-50 border-yellow-200;
-}
-
-.confidence-low {
-  @apply text-blue-600 bg-blue-50 border-blue-200;
-}
-
-/* Smooth transitions for expandable content */
-.expandable-content {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease-out;
-}
-
-.expandable-content.expanded {
-  max-height: 500px;
-  transition: max-height 0.3s ease-in;
+/* Labels next to checkboxes */
+label {
+  @apply font-bold uppercase !important;
+  color: var(--riso-black) !important;
 }

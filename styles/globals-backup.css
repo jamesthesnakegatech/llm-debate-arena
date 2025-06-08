@@ -1,0 +1,25 @@
+404: Not Found
+/* Additional debate page specific fixes */
+.debate-message .riso-debate-turn {
+  color: var(--riso-black) !important;
+}
+
+.debate-message .riso-debate-turn p,
+.debate-message .riso-debate-turn span {
+  color: var(--riso-black) !important;
+}
+
+/* Fix for debate turn backgrounds */
+.riso-debate-turn[style*="pink"] {
+  background-color: var(--riso-pink) !important;
+  color: var(--riso-black) !important;
+}
+
+.riso-debate-turn[style*="blue"] {
+  background-color: var(--riso-blue) !important;
+  color: white !important;
+}
+
+.riso-debate-turn[style*="blue"] * {
+  color: white !important;
+}

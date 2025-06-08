@@ -7,9 +7,6 @@ import { prisma } from '@/lib/prisma';
 import { useSocket } from '@/hooks/useSocket';
 import { FactChecker } from '@/components/FactChecker';
 import { CheckCircle, XCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
-import TurnVoteButtons from '@/components/TurnVoteButtons';
-import { useTurnVoting } from '@/hooks/useTurnVoting';
-import type { TurnVote } from '@/types/debate';
 import type { FactCheckResult } from '@/components/FactChecker/types';
 import TypingIndicator from '@/components/TypingIndicator';
 
@@ -55,9 +52,6 @@ export default function DebatePage({ debate: initialDebate }: Props) {
   const [selectedWinner, setSelectedWinner] = useState<string>('');
   const [voteReasoning, setVoteReasoning] = useState('');
   const [hasVoted, setHasVoted] = useState(false);
- 
-  // Turn voting
-  const { turnVotes, handleVote: handleTurnVote } = useTurnVoting(debate.id);
   
   // Fact checking states
   const [factCheckResults, setFactCheckResults] = useState<Map<string, FactCheckResult[]>>(new Map());
@@ -475,12 +469,6 @@ export default function DebatePage({ debate: initialDebate }: Props) {
                     const isLlm1 = turn.llmName === debate.llm1Name;
                     const verdictSummary = getVerdictSummary(turn.id);
                     const turnFactChecks = factCheckResults.get(turn.id) || [];
-                    const votes: TurnVote = turnVotes.get(turn.id) || {
-                      turnId: turn.id,
-                      upvotes: 0,
-                      downvotes: 0,
-                      userVote: null
-                    };
                     
                     return (
                       <div
@@ -558,14 +546,6 @@ export default function DebatePage({ debate: initialDebate }: Props) {
                                 </div>
                               </div>
                             )}
-                            
-                            {/* Add voting buttons for each turn */}
-                            <TurnVoteButtons
-                              turnId={turn.id}
-                              initialVotes={{ up: votes.upvotes, down: votes.downvotes }}
-                              userVote={votes.userVote}
-                              onVote={handleTurnVote}
-                            />
                           </div>
                         </div>
                       </div>
@@ -576,6 +556,7 @@ export default function DebatePage({ debate: initialDebate }: Props) {
                   {isGenerating && (
                     <TypingIndicator
                       llmName={safeTurns.length % 2 === 0 ? debate.llm1Name : debate.llm2Name}
+                      color={safeTurns.length % 2 === 0 ? 'blue' : 'red'}
                     />
                   )}
                 </div>
