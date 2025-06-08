@@ -1,0 +1,103 @@
+--- a/pages/debate/[id].tsx
++++ b/pages/debate/[id].tsx
+@@ -95,6 +95,21 @@
+     }
+   }, [socket])
+ 
++  // Auto-continue debate
++  useEffect(() => {
++    if ((debate.status === 'in_progress' || debate.status === 'active') && 
++        debate.turns.length > 0 && 
++        debate.turns.length < MAX_TURNS && 
++        !isGenerating && 
++        !showVoting) {
++      // Auto-continue after a delay
++      const timer = setTimeout(() => {
++        continueDebate();
++      }, 3000); // 3 seconds between turns
++      
++      return () => clearTimeout(timer);
++    }
++  }, [debate.turns.length, debate.status, isGenerating, showVoting]);
++
+   const startDebate = async () => {
+     setIsStarting(true)
++    setIsGenerating(true)
+@@ -107,8 +122,20 @@
+       
+       if (data.success) {
+-        // Refresh the page to show the first turn
+-        router.reload()
++        // Update local state instead of reloading
++        if (data.turn) {
++          setDebate(prev => ({
++            ...prev,
++            status: 'in_progress',
++            turns: [data.turn]
++          }));
++        } else if (data.turns) {
++          // Handle case where debate already has turns
++          setDebate(prev => ({
++            ...prev,
++            status: 'in_progress',
++            turns: data.turns
++          }));
++        }
+       } else {
+         alert(`Error: ${data.error}`)
+       }
+@@ -117,6 +144,7 @@
+       console.error(error)
+     } finally {
+       setIsStarting(false)
++      setIsGenerating(false)
+     }
+   }
+ 
+@@ -134,13 +162,14 @@
+       })
+       const data = await response.json()
+       
+-      if (data.success) {
++      if (data.success && data.turn) {
+         // Add the new turn to the debate
+         setDebate(prev => ({
+           ...prev,
+-          turns: [...prev.turns, data.newTurn]
++          turns: [...prev.turns, data.turn],
++          status: data.isComplete ? 'completed' : 'in_progress'
+         }))
+         
+         // If we've reached max turns, show voting
+-        if (debate.turns.length + 1 >= MAX_TURNS) {
++        if (data.isComplete || debate.turns.length + 1 >= MAX_TURNS) {
+           setTimeout(() => setShowVoting(true), 1000)
+         }
+@@ -234,7 +262,7 @@
+               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+-                debate.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+-                debate.status === 'active' ? 'bg-green-100 text-green-800' :
++                debate.status === 'created' || debate.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
++                debate.status === 'in_progress' || debate.status === 'active' ? 'bg-green-100 text-green-800' :
++                debate.status === 'completed' ? 'bg-gray-100 text-gray-800' :
+                 'bg-gray-100 text-gray-800'
+               }`}>
+-                {debate.status.charAt(0).toUpperCase() + debate.status.slice(1)}
++                {debate.status === 'created' ? 'Pending' : 
++                 debate.status === 'in_progress' ? 'Active' :
++                 debate.status.charAt(0).toUpperCase() + debate.status.slice(1)}
+               </span>
+@@ -266,7 +294,7 @@
+           </div>
+ 
+           {/* Debate Status Actions */}
+-          {debate.status === 'pending' && (
++          {(debate.status === 'created' || debate.status === 'pending') && (
+             <div className="bg-white rounded-lg shadow-sm p-6 mb-6 text-center">
+@@ -344,7 +372,7 @@
+           )}
+ 
+           {/* Generate Next Turn */}
+-          {debate.status === 'active' && debate.turns.length > 0 && debate.turns.length < MAX_TURNS && !showVoting && (
++          {(debate.status === 'in_progress' || debate.status === 'active') && debate.turns.length > 0 && debate.turns.length < MAX_TURNS && !showVoting && !isGenerating && (
+             <div className="bg-white rounded-lg shadow-sm p-6 text-center mb-6">

@@ -1,0 +1,13 @@
+@@ -127,6 +127,12 @@
+       const data = await response.json()
+       
+       if (data.success) {
++        // Handle the response structure { success: true, debate: {...} }
++        if (data.debate && !data.turn) {
++          setDebate(data.debate);
++          setIsGenerating(false);
++          return;
++        }
+         // Update local state instead of reloading
+         if (data.turn && data.turn.llmName) {
+           setDebate(prev => ({

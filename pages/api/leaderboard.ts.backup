@@ -1,0 +1,135 @@
+// pages/api/leaderboard.ts
+
+import { NextApiRequest, NextApiResponse } from 'next'
+import { prisma } from '../../lib/prisma'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  try {
+    // Get all completed debates with their votes
+    const debates = await prisma.debate.findMany({
+      where: {
+        status: 'completed'
+      },
+      include: {
+        votes: true
+      }
+    })
+
+    // Calculate stats for each LLM
+    const llmStats: Record<string, {
+      wins: number
+      losses: number
+      ties: number
+      bothBad: number
+      totalDebates: number
+    }> = {}
+
+    // Process each debate
+    debates.forEach(debate => {
+      // Initialize stats for both LLMs if not exists
+      if (!llmStats[debate.llm1Name]) {
+        llmStats[debate.llm1Name] = { wins: 0, losses: 0, ties: 0, bothBad: 0, totalDebates: 0 }
+      }
+      if (!llmStats[debate.llm2Name]) {
+        llmStats[debate.llm2Name] = { wins: 0, losses: 0, ties: 0, bothBad: 0, totalDebates: 0 }
+      }
+
+      // Count votes for this debate
+      const voteCounts = {
+        llm1: 0,
+        llm2: 0,
+        tie: 0,
+        bothBad: 0
+      }
+
+      debate.votes.forEach(vote => {
+        if (vote.winner === 'llm1') voteCounts.llm1++
+        else if (vote.winner === 'llm2') voteCounts.llm2++
+        else if (vote.winner === 'tie') voteCounts.tie++
+        else if (vote.winner === 'bothBad') voteCounts.bothBad++
+      })
+
+      // Skip if no votes
+      if (debate.votes.length === 0) return
+
+      // Determine winner based on vote counts
+      const totalVotes = debate.votes.length
+      
+      // If bothBad has the most votes, both LLMs lose
+      if (voteCounts.bothBad > voteCounts.llm1 && 
+          voteCounts.bothBad > voteCounts.llm2 && 
+          voteCounts.bothBad > voteCounts.tie) {
+        llmStats[debate.llm1Name].losses++
+        llmStats[debate.llm2Name].losses++
+        llmStats[debate.llm1Name].bothBad++
+        llmStats[debate.llm2Name].bothBad++
+      }
+      // If tie has the most votes
+      else if (voteCounts.tie >= voteCounts.llm1 && 
+               voteCounts.tie >= voteCounts.llm2 && 
+               voteCounts.tie >= voteCounts.bothBad) {
+        llmStats[debate.llm1Name].ties++
+        llmStats[debate.llm2Name].ties++
+      }
+      // If llm1 wins
+      else if (voteCounts.llm1 > voteCounts.llm2) {
+        llmStats[debate.llm1Name].wins++
+        llmStats[debate.llm2Name].losses++
+      }
+      // If llm2 wins
+      else {
+        llmStats[debate.llm2Name].wins++
+        llmStats[debate.llm1Name].losses++
+      }
+
+      // Increment total debates
+      llmStats[debate.llm1Name].totalDebates++
+      llmStats[debate.llm2Name].totalDebates++
+    })
+
+    // Convert to leaderboard format
+    const leaderboard = Object.entries(llmStats)
+      .map(([llmName, stats]) => {
+        // Calculate win rate: (wins + 0.5 * ties) / total
+        const winRate = stats.totalDebates > 0
+          ? ((stats.wins + 0.5 * stats.ties) / stats.totalDebates) * 100
+          : 0
+
+        return {
+          llmName,
+          wins: stats.wins,
+          losses: stats.losses,
+          ties: stats.ties,
+          bothBad: stats.bothBad,
+          winRate,
+          totalDebates: stats.totalDebates
+        }
+      })
+      .filter(entry => entry.totalDebates > 0) // Only show LLMs that have participated
+      .sort((a, b) => {
+        // Sort by win rate first, then by total debates
+        if (b.winRate !== a.winRate) {
+          return b.winRate - a.winRate
+        }
+        return b.totalDebates - a.totalDebates
+      })
+
+    res.status(200).json({ 
+      success: true,
+      leaderboard 
+    })
+
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error)
+    res.status(500).json({ 
+      error: 'Failed to fetch leaderboard' 
+    })
+  }
+}

@@ -1,0 +1,117 @@
+import { NextApiRequest, NextApiResponse } from 'next'
+import { prisma } from '../../../../lib/prisma'
+import { v4 as uuidv4 } from 'uuid'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const { id } = req.query
+  const { winner, reasoning } = req.body
+
+  try {
+    // Validate inputs - now includes "both_bad"
+    if (!winner || !['llm1', 'llm2', 'tie', 'bothBad'].includes(winner)) {
+      return res.status(400).json({ 
+        error: 'Invalid winner. Must be llm1, llm2, tie, or both_bad' 
+      })
+    }
+
+    // Get the debate
+    const debate = await prisma.debate.findUnique({
+      where: { id: id as string },
+      include: { votes: true }
+    })
+
+    if (!debate) {
+      return res.status(404).json({ error: 'Debate not found' })
+    }
+
+    // Generate a session-based judge ID (in a real app, this would be user auth)
+    const judgeId = req.headers['x-forwarded-for'] || 
+                   req.connection.remoteAddress || 
+                   req.socket.remoteAddress ||
+                   uuidv4()
+
+    // Check if this judge has already voted
+    const existingVote = await prisma.vote.findUnique({
+      where: {
+        debateId_judgeId: {
+          debateId: debate.id,
+          judgeId: judgeId as string
+        }
+      }
+    })
+
+    if (existingVote) {
+      return res.status(400).json({ 
+        error: 'You have already voted on this debate' 
+      })
+    }
+
+    // Create the vote
+    await prisma.vote.create({
+      data: {
+        debateId: debate.id,
+        judgeId: judgeId as string,
+        winner,
+        reasoning: reasoning || null
+      }
+    })
+
+    // Get updated vote counts - now includes both_bad
+    const votes = await prisma.vote.findMany({
+      where: { debateId: debate.id }
+    })
+
+    const voteCount = {
+      llm1: votes.filter(v => v.winner === 'llm1').length,
+      llm2: votes.filter(v => v.winner === 'llm2').length,
+      tie: votes.filter(v => v.winner === 'tie').length,
+      both_bad: votes.filter(v => v.winner === 'both_bad').length
+    }
+
+    // Update debate winner if there's a clear majority
+    const totalVotes = voteCount.llm1 + voteCount.llm2 + voteCount.tie + voteCount.both_bad
+    let debateWinner = null
+    
+    if (totalVotes >= 3) { // Require at least 3 votes
+      const maxVotes = Math.max(voteCount.llm1, voteCount.llm2, voteCount.tie, voteCount.both_bad)
+      
+      if (voteCount.llm1 === maxVotes && voteCount.llm1 > 0) {
+        debateWinner = 'llm1'
+      } else if (voteCount.llm2 === maxVotes && voteCount.llm2 > 0) {
+        debateWinner = 'llm2'
+      } else if (voteCount.tie === maxVotes && voteCount.tie > 0) {
+        debateWinner = 'tie'
+      } else if (voteCount.both_bad === maxVotes && voteCount.both_bad > 0) {
+        debateWinner = 'both_bad'
+      }
+    }
+
+    // Update the debate with the winner if determined
+    if (debateWinner && debate.winner !== debateWinner) {
+      await prisma.debate.update({
+        where: { id: debate.id },
+        data: { winner: debateWinner }
+      })
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Vote recorded successfully',
+      voteCount,
+      winner: debateWinner
+    })
+
+  } catch (error) {
+    console.error('Error recording vote:', error)
+    res.status(500).json({ 
+      error: 'Failed to record vote' 
+    })
+  }
+}
