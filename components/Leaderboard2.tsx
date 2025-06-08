@@ -131,7 +131,7 @@ export default function Leaderboard() {
 
       <div className="mt-6 pt-4 border-t text-xs text-gray-500">
         <p>Win rate is calculated as: (Wins + 0.5 × Ties) / Total Debates</p>
-        <p className="mt-1">Note: "Both Weak" votes count as losses for both LLMs</p>
+        <p className="mt-1">Note: &quot;Both Weak&quot; votes count as losses for both LLMs</p>
       </div>
     </div>
   )

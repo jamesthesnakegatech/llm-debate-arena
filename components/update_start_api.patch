@@ -1,0 +1,28 @@
+--- pages/api/debate/[id]/start.ts.orig
++++ pages/api/debate/[id]/start.ts
+@@ -1,7 +1,7 @@
+ import { NextApiRequest, NextApiResponse } from 'next';
+ import { prisma } from '../../../../lib/prisma';
+-import { freeLLMService } from '../../../../lib/free-llm-service';
++import { enhancedLLMService } from '../../../../lib/enhanced-llm-service';
+ import { getIO } from '../../../../lib/socket';
+ 
+ export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+@@ -37,7 +37,7 @@
+ 
+     // Generate first turn (LLM1)
+     try {
+-      const llm1Response = await freeLLMService.generateDebateResponse(
++      const llm1Response = await enhancedLLMService.generateDebateResponse(
+         debate.llm1Name,
+         {
+           topic: debate.topic,
+@@ -52,6 +52,9 @@
+           llmName: debate.llm1Name,
+           message: llm1Response.content,
+           turnNumber: 1,
++          argumentStrength: llm1Response.argumentAnalysis?.strength || null,
++          strengthBreakdown: llm1Response.argumentAnalysis?.breakdown || null,
++          factClaims: llm1Response.factClaims || null,
+         },
+       });

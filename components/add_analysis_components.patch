@@ -1,0 +1,44 @@
+--- pages/debate/[id].tsx.orig
++++ pages/debate/[id].tsx
+@@ -6,6 +6,8 @@
+ import { useSocket } from '../../hooks/useSocket'
+ import TypingIndicator from '../../components/TypingIndicator'
++import ArgumentStrengthMeter from '../../components/ArgumentStrengthMeter'
++import FactCheckIndicator from '../../components/FactCheckIndicator'
+ 
+ interface Turn {
+   id: string
+@@ -13,6 +15,9 @@
+   message: string
+   turnNumber: number
+   createdAt: string
++  argumentStrength?: number | null
++  strengthBreakdown?: any
++  factClaims?: any
+ }
+ 
+ interface DebateData {
+@@ -410,6 +415,22 @@
+                         <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                           {turn.message}
+                         </p>
++                        
++                        {/* Argument Strength Meter */}
++                        {turn.argumentStrength && turn.strengthBreakdown && (
++                          <ArgumentStrengthMeter
++                            strength={turn.argumentStrength}
++                            breakdown={turn.strengthBreakdown}
++                            turnId={turn.id}
++                          />
++                        )}
++                        
++                        {/* Fact Check Indicator */}
++                        {turn.factClaims && turn.factClaims.length > 0 && (
++                          <FactCheckIndicator
++                            claims={turn.factClaims}
++                            turnId={turn.id}
++                          />
++                        )}
+                       </div>
+                     </div>
+                   </div>

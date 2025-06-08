@@ -58,7 +58,7 @@ export default function FactCheckIndicator({ claims, turnId }: FactCheckIndicato
               <div className="absolute z-10 mt-2 p-3 bg-white rounded-lg shadow-lg border max-w-sm animate-fadeIn">
                 <div className="text-sm">
                   <p className="font-medium text-gray-900 mb-2">Claim:</p>
-                  <p className="text-gray-700 italic mb-3">"{claim.text}"</p>
+                  <p className="text-gray-700 italic mb-3">{`"${claim.text}"`}</p>
                   
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-medium text-gray-500">Verification Priority:</span>

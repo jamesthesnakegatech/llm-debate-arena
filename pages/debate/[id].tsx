@@ -5,6 +5,8 @@ import { GetServerSideProps } from 'next'
 import { prisma } from '../../lib/prisma'
 import { useSocket } from '../../hooks/useSocket'
 import TypingIndicator from '../../components/TypingIndicator'
+import ArgumentStrengthMeter from '../../components/ArgumentStrengthMeter'
+import EnhancedFactCheckIndicator from '../../components/EnhancedFactCheckIndicator'
 
 interface Turn {
   id: string
@@ -456,7 +458,7 @@ export default function DebatePage({ debate: initialDebate }: Props) {
                     onChange={(e) => setSelectedWinner(e.target.value)}
                     className="h-4 w-4 text-gray-600"
                   />
-                  <span className="font-medium">It's a Tie</span>
+                  <span className="font-medium">It&apos;s a Tie</span>
                 </label>
                 
                 <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
