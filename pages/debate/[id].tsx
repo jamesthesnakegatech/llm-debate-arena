@@ -1,157 +1,196 @@
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/router'
-import Head from 'next/head'
-import { GetServerSideProps } from 'next'
-import { prisma } from '../../lib/prisma'
-import { useSocket } from '../../hooks/useSocket'
-import TypingIndicator from '../../components/TypingIndicator'
-import ArgumentStrengthMeter from '../../components/ArgumentStrengthMeter'
-import EnhancedFactCheckIndicator from '../../components/EnhancedFactCheckIndicator'
+// pages/debate/[id].tsx
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import Head from 'next/head';
+import { GetServerSideProps } from 'next';
+import { prisma } from '@/lib/prisma';
+import { useSocket } from '@/hooks/useSocket';
+import { FactChecker } from '@/components/FactChecker';
+import { CheckCircle, XCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
+import type { FactCheckResult } from '@/components/FactChecker/types';
+import TypingIndicator from '@/components/TypingIndicator';
 
 interface Turn {
-  id: string
-  llmName: string
-  message: string
-  turnNumber: number
-  createdAt: string
+  id: string;
+  llmName: string;
+  message: string;
+  turnNumber: number;
+  createdAt: string;
+  argumentStrength?: number;
+  strengthBreakdown?: string;
+  factClaims?: string;
 }
 
 interface DebateData {
-  id: string
-  topic: string
-  llm1Name: string
-  llm2Name: string
-  llm1Position: string
-  llm2Position: string
-  status: string
-  winner?: string
-  turns: Turn[]
+  id: string;
+  topic: string;
+  llm1Name: string;
+  llm2Name: string;
+  llm1Position: string;
+  llm2Position: string;
+  status: string;
+  winner?: string;
+  turns: Turn[];
   voteCount: {
-    llm1: number
-    llm2: number
-    tie: number
-    bothBad: number
-  }
+    llm1: number;
+    llm2: number;
+    tie: number;
+    bothBad: number;
+  };
 }
 
 interface Props {
-  debate: DebateData
+  debate: DebateData;
 }
 
 export default function DebatePage({ debate: initialDebate }: Props) {
-  const router = useRouter()
-  const [debate, setDebate] = useState<DebateData>(initialDebate)
-  const [isStarting, setIsStarting] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [showVoting, setShowVoting] = useState(false)
-  const [selectedWinner, setSelectedWinner] = useState<string>('')
-  const [voteReasoning, setVoteReasoning] = useState('')
-  const [hasVoted, setHasVoted] = useState(false)
+  const router = useRouter();
+  const [debate, setDebate] = useState<DebateData>(initialDebate);
+  const [isStarting, setIsStarting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showVoting, setShowVoting] = useState(false);
+  const [selectedWinner, setSelectedWinner] = useState<string>('');
+  const [voteReasoning, setVoteReasoning] = useState('');
+  const [hasVoted, setHasVoted] = useState(false);
   
-  // Real-time updates
-  const socket = useSocket(debate.id)
+  // Fact checking states
+  const [factCheckResults, setFactCheckResults] = useState<Map<string, FactCheckResult[]>>(new Map());
+  const [showFactChecker, setShowFactChecker] = useState(false);
+  const [isFactCheckingEnabled, setIsFactCheckingEnabled] = useState(true);
 
-  const MAX_TURNS = 6 // 3 turns per LLM
+  // Real-time updates
+  const socket = useSocket(debate.id);
+
+  const MAX_TURNS = 6; // 3 turns per LLM
 
   useEffect(() => {
-    // Check if user has already voted (using session storage)
-    const votedDebates = JSON.parse(sessionStorage.getItem('votedDebates') || '[]')
+    // Check if user has already voted
+    const votedDebates = JSON.parse(sessionStorage.getItem('votedDebates') || '[]');
     if (votedDebates.includes(debate.id)) {
-      setHasVoted(true)
+      setHasVoted(true);
     }
     
     // Auto-show voting if debate is complete
     if (debate.status === 'completed' && debate.turns.length >= MAX_TURNS) {
-      setShowVoting(true)
+      setShowVoting(true);
     }
-  }, [debate.id, debate.status, debate.turns.length])
+  }, [debate.id, debate.status, debate.turns.length]);
 
   // Socket event listeners
   useEffect(() => {
-    if (!socket) return
+    if (!socket) return;
 
     socket.on('debate-updated', (updatedDebate) => {
-      setDebate(updatedDebate.debate || updatedDebate)
-      setIsGenerating(false)
-    })
+      setDebate(updatedDebate.debate || updatedDebate);
+      setIsGenerating(false);
+    });
 
     socket.on('new-turn', (newTurn) => {
       setDebate(prev => ({
         ...prev,
         turns: [...prev.turns, newTurn]
-      }))
-      setIsGenerating(false)
+      }));
+      setIsGenerating(false);
       
-      // Check if debate is complete
       if (newTurn.turnNumber >= MAX_TURNS) {
-        setTimeout(() => setShowVoting(true), 1000)
+        setTimeout(() => setShowVoting(true), 1000);
       }
-    })
+    });
 
     socket.on('vote-updated', (voteData) => {
       setDebate(prev => ({
         ...prev,
         voteCount: voteData.voteCount
-      }))
-    })
+      }));
+    });
 
     return () => {
-      socket.off('debate-updated')
-      socket.off('new-turn')
-      socket.off('vote-updated')
-    }
-  }, [socket])
-
-  // Auto-continue debate
-  useEffect(() => {
-    if ((debate.status === 'in_progress' || (debate.status === 'in_progress' || debate.status === 'active')) && 
-        debate.turns.length > 0 && 
-        debate.turns.length < MAX_TURNS && 
-        !isGenerating && 
-        !showVoting) {
-      // Auto-continue after a delay
-      const timer = setTimeout(() => {
-        continueDebate();
-      }, 3000); // 3 seconds between turns
-      
-      return () => clearTimeout(timer);
-    }
-  }, [debate.turns.length, debate.status, isGenerating, showVoting]);
-
-  // Auto-refresh to get latest turns
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    
-    const refreshDebate = async () => {
-      try {
-        const res = await fetch(`/api/debate/${debate.id}`);
-        const data = await res.json();
-        if (data.success && data.debate) {
-          setDebate(data.debate);
-        }
-      } catch (error) {
-        console.error('Error refreshing debate:', error);
-      }
+      socket.off('debate-updated');
+      socket.off('new-turn');
+      socket.off('vote-updated');
     };
+  }, [socket]);
+
+  // Handle fact check completion
+  const handleFactCheckComplete = (result: FactCheckResult) => {
+    const turnId = result.claimId.split('-')[0];
     
-    if (debate.status === 'in_progress') {
-      interval = setInterval(refreshDebate, 1000); // Refresh every second
+    setFactCheckResults(prev => {
+      const newMap = new Map(prev);
+      const existing = newMap.get(turnId) || [];
+      newMap.set(turnId, [...existing, result]);
+      return newMap;
+    });
+
+    // Save fact check results to the turn in the database
+    saveFactCheckToTurn(turnId, result);
+  };
+
+  const saveFactCheckToTurn = async (turnId: string, result: FactCheckResult) => {
+    try {
+      // Get existing fact claims
+      const turn = debate.turns.find(t => t.id === turnId);
+      if (!turn) return;
+
+      const existingClaims = turn.factClaims ? JSON.parse(turn.factClaims) : {};
+      existingClaims[result.claimId] = result;
+
+      // Update the turn with fact check data
+      await fetch(`/api/debate/${debate.id}/turn/${turnId}/fact-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ factClaims: existingClaims })
+      });
+    } catch (error) {
+      console.error('Error saving fact check:', error);
     }
-    
-    return () => clearInterval(interval);
-  }, [debate.id, debate.status]);
+  };
+
+  // Transform turns for fact checker
+  const factCheckerMessages = debate.turns.map(turn => ({
+    id: turn.id,
+    speaker: turn.llmName,
+    content: turn.message,
+    timestamp: new Date(turn.createdAt)
+  }));
+
+  // Get verdict summary for a turn
+  const getVerdictSummary = (turnId: string) => {
+    const results = factCheckResults.get(turnId) || [];
+    if (results.length === 0) return null;
+
+    const summary = {
+      verified: 0,
+      false: 0,
+      'partially-true': 0,
+      unverifiable: 0
+    };
+
+    results.forEach(result => {
+      summary[result.verdict]++;
+    });
+
+    return summary;
+  };
+
+  const getVerdictIcon = (verdict: FactCheckResult['verdict']) => {
+    switch (verdict) {
+      case 'verified': return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'false': return <XCircle className="w-4 h-4 text-red-600" />;
+      case 'partially-true': return <AlertCircle className="w-4 h-4 text-yellow-600" />;
+      default: return <Info className="w-4 h-4 text-gray-600" />;
+    }
+  };
 
   const startDebate = async () => {
-    setIsStarting(true)
+    setIsStarting(true);
     try {
       const response = await fetch(`/api/debate/${debate.id}/start`, {
         method: 'POST'
-      })
-      const data = await response.json()
+      });
+      const data = await response.json();
       
       if (data.success) {
-        // Refresh the page to show the first turn
-        // router.reload() - removed for auto-continue
         if (data.turn) {
           setDebate(prev => ({
             ...prev,
@@ -160,50 +199,48 @@ export default function DebatePage({ debate: initialDebate }: Props) {
           }));
         }
       } else {
-        alert(`Error: ${data.error}`)
+        alert(`Error: ${data.error}`);
       }
     } catch (error) {
-      alert('Failed to start debate')
-      console.error(error)
+      alert('Failed to start debate');
+      console.error(error);
     } finally {
-      setIsStarting(false)
+      setIsStarting(false);
     }
-  }
+  };
 
   const continueDebate = async () => {
     if (debate.turns.length >= MAX_TURNS) {
-      setShowVoting(true)
-      return
+      setShowVoting(true);
+      return;
     }
 
-    setIsGenerating(true)
+    setIsGenerating(true);
     try {
       const response = await fetch(`/api/debate/${debate.id}/continue`, {
         method: 'POST'
-      })
-      const data = await response.json()
+      });
+      const data = await response.json();
       
       if (data.success) {
-        // Add the new turn to the debate
         setDebate(prev => ({
           ...prev,
           turns: [...prev.turns, data.newTurn]
-        }))
+        }));
         
-        // If we've reached max turns, show voting
         if (debate.turns.length + 1 >= MAX_TURNS) {
-          setTimeout(() => setShowVoting(true), 1000)
+          setTimeout(() => setShowVoting(true), 1000);
         }
       } else {
-        alert(`Error: ${data.error}`)
+        alert(`Error: ${data.error}`);
       }
     } catch (error) {
-      alert('Failed to continue debate')
-      console.error(error)
+      alert('Failed to continue debate');
+      console.error(error);
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
-  }
+  };
 
   const submitVote = async () => {
     if (!selectedWinner) {
@@ -213,14 +250,10 @@ export default function DebatePage({ debate: initialDebate }: Props) {
 
     const judgeId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    console.log('Submitting vote:', { winner: selectedWinner, judgeId });
-
     try {
       const response = await fetch(`/api/debate/${debate.id}/vote`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           winner: selectedWinner,
           judgeId: judgeId,
@@ -231,7 +264,6 @@ export default function DebatePage({ debate: initialDebate }: Props) {
       const data = await response.json();
       
       if (response.ok && data.success) {
-        // Mark as voted
         const votedDebates = JSON.parse(sessionStorage.getItem('votedDebates') || '[]');
         votedDebates.push(debate.id);
         sessionStorage.setItem('votedDebates', JSON.stringify(votedDebates));
@@ -239,28 +271,13 @@ export default function DebatePage({ debate: initialDebate }: Props) {
         setHasVoted(true);
         setShowVoting(false);
         
-        // Update vote counts
         if (data.voteCount) {
           setDebate(prev => ({
             ...prev,
             voteCount: data.voteCount,
           }));
         }
-        
-        // Show rating changes
-        if (data.ratingChanges) {
-          const llm1Change = data.ratingChanges[debate.llm1Name];
-          const llm2Change = data.ratingChanges[debate.llm2Name];
-          
-          alert(
-            `Vote submitted successfully!\n\n` +
-            `ELO Rating Changes:\n` +
-            `${debate.llm1Name}: ${llm1Change.before} → ${llm1Change.after} (${llm1Change.change > 0 ? '+' : ''}${llm1Change.change})\n` +
-            `${debate.llm2Name}: ${llm2Change.before} → ${llm2Change.after} (${llm2Change.change > 0 ? '+' : ''}${llm2Change.change})`
-          );
-        }
       } else {
-        console.error('Vote failed:', data);
         alert(`Error: ${data.error || 'Failed to submit vote'}`);
       }
     } catch (error) {
@@ -270,18 +287,18 @@ export default function DebatePage({ debate: initialDebate }: Props) {
   };
 
   const getLLMColor = (llmName: string) => {
-    return llmName === debate.llm1Name ? 'blue' : 'red'
-  }
+    return llmName === debate.llm1Name ? 'blue' : 'red';
+  };
 
   const getPositionBadge = (llmName: string) => {
-    const position = llmName === debate.llm1Name ? debate.llm1Position : debate.llm2Position
-    const color = position === 'pro' ? 'green' : 'orange'
+    const position = llmName === debate.llm1Name ? debate.llm1Position : debate.llm2Position;
+    const color = position === 'pro' ? 'green' : 'orange';
     return (
       <span className={`px-2 py-1 text-xs font-medium rounded-full bg-${color}-100 text-${color}-800`}>
         {position.toUpperCase()}
       </span>
-    )
-  }
+    );
+  };
 
   return (
     <>
@@ -290,7 +307,7 @@ export default function DebatePage({ debate: initialDebate }: Props) {
       </Head>
 
       <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
           {/* Header */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -300,13 +317,42 @@ export default function DebatePage({ debate: initialDebate }: Props) {
               >
                 ← Back to Arena
               </button>
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                (debate.status === 'created' || debate.status === 'pending') ? 'bg-yellow-100 text-yellow-800' :
-                (debate.status === 'in_progress' || debate.status === 'active') ? 'bg-green-100 text-green-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {debate.status.charAt(0).toUpperCase() + debate.status.slice(1)}
-              </span>
+              <div className="flex items-center gap-4">
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  (debate.status === 'created' || debate.status === 'pending') ? 'bg-yellow-100 text-yellow-800' :
+                  (debate.status === 'in_progress' || debate.status === 'active') ? 'bg-green-100 text-green-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {debate.status.charAt(0).toUpperCase() + debate.status.slice(1)}
+                </span>
+                
+                {/* Fact Checking Controls */}
+                {debate.turns.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isFactCheckingEnabled}
+                        onChange={(e) => setIsFactCheckingEnabled(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                      <span>Fact Check</span>
+                    </label>
+                    
+                    {isFactCheckingEnabled && (
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={showFactChecker}
+                          onChange={(e) => setShowFactChecker(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <span>Show Panel</span>
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             
             <h1 className="text-2xl font-bold text-gray-900 mb-4">
@@ -330,216 +376,292 @@ export default function DebatePage({ debate: initialDebate }: Props) {
             </div>
           </div>
 
-          {/* Debate Status Actions */}
-          {(debate.status === 'created' || debate.status === 'pending') && (
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6 text-center">
-              <h2 className="text-xl font-semibold mb-4">Ready to Start the Debate?</h2>
-              <p className="text-gray-600 mb-4">
-                The AI models will debate this topic with {MAX_TURNS / 2} rounds each.
-              </p>
-              <button
-                onClick={startDebate}
-                disabled={isStarting}
-                className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                {isStarting ? 'Starting...' : 'Start Debate 🚀'}
-              </button>
-            </div>
-          )}
-
-          {/* Debate Turns */}
-          {debate.turns.length > 0 && (
-            <div className="space-y-4 mb-6">
-              {(debate.turns || []).filter(turn => turn && turn.llmName).map((turn, index) => {
-                const color = getLLMColor(turn.llmName)
-                const isLlm1 = turn.llmName === debate.llm1Name
-                
-                return (
-                  <div
-                    key={turn.id}
-                    className={`flex ${isLlm1 ? 'justify-start' : 'justify-end'} debate-message`}
+          <div className={`grid ${showFactChecker && isFactCheckingEnabled ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-6`}>
+            {/* Main Debate Area */}
+            <div className={`${showFactChecker && isFactCheckingEnabled ? 'lg:col-span-2' : ''}`}>
+              {/* Start Debate Button */}
+              {(debate.status === 'created' || debate.status === 'pending') && (
+                <div className="bg-white rounded-lg shadow-sm p-6 mb-6 text-center">
+                  <h2 className="text-xl font-semibold mb-4">Ready to Start the Debate?</h2>
+                  <p className="text-gray-600 mb-4">
+                    The AI models will debate this topic with {MAX_TURNS / 2} rounds each.
+                  </p>
+                  <button
+                    onClick={startDebate}
+                    disabled={isStarting}
+                    className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
-                    <div className={`max-w-3xl ${isLlm1 ? 'mr-12' : 'ml-12'}`}>
-                      <div className={`p-4 rounded-lg ${
-                        color === 'blue' ? 'bg-blue-100 border-l-4 border-blue-500' : 
-                        'bg-red-100 border-r-4 border-red-500'
-                      }`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`font-semibold ${
-                            color === 'blue' ? 'text-blue-900' : 'text-red-900'
+                    {isStarting ? 'Starting...' : 'Start Debate 🚀'}
+                  </button>
+                </div>
+              )}
+
+              {/* Debate Turns */}
+              {debate.turns.length > 0 && (
+                <div className="space-y-4 mb-6">
+                  {debate.turns.map((turn) => {
+                    const color = getLLMColor(turn.llmName);
+                    const isLlm1 = turn.llmName === debate.llm1Name;
+                    const verdictSummary = getVerdictSummary(turn.id);
+                    const turnFactChecks = factCheckResults.get(turn.id) || [];
+                    
+                    return (
+                      <div
+                        key={turn.id}
+                        className={`flex ${isLlm1 ? 'justify-start' : 'justify-end'} debate-message`}
+                      >
+                        <div className={`max-w-3xl ${isLlm1 ? 'mr-12' : 'ml-12'}`}>
+                          <div className={`p-4 rounded-lg ${
+                            color === 'blue' ? 'bg-blue-100 border-l-4 border-blue-500' : 
+                            'bg-red-100 border-r-4 border-red-500'
                           }`}>
-                            {turn.llmName}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            Turn {turn.turnNumber}
-                          </span>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`font-semibold ${
+                                color === 'blue' ? 'text-blue-900' : 'text-red-900'
+                              }`}>
+                                {turn.llmName}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">
+                                  Turn {turn.turnNumber}
+                                </span>
+                                
+                                {/* Fact Check Summary */}
+                                {isFactCheckingEnabled && verdictSummary && (
+                                  <div className="flex items-center gap-1">
+                                    {verdictSummary.verified > 0 && (
+                                      <div className="flex items-center gap-0.5 bg-green-100 px-1.5 py-0.5 rounded-full">
+                                        <CheckCircle className="w-3 h-3 text-green-600" />
+                                        <span className="text-xs text-green-700">{verdictSummary.verified}</span>
+                                      </div>
+                                    )}
+                                    {verdictSummary.false > 0 && (
+                                      <div className="flex items-center gap-0.5 bg-red-100 px-1.5 py-0.5 rounded-full">
+                                        <XCircle className="w-3 h-3 text-red-600" />
+                                        <span className="text-xs text-red-700">{verdictSummary.false}</span>
+                                      </div>
+                                    )}
+                                    {verdictSummary['partially-true'] > 0 && (
+                                      <div className="flex items-center gap-0.5 bg-yellow-100 px-1.5 py-0.5 rounded-full">
+                                        <AlertCircle className="w-3 h-3 text-yellow-600" />
+                                        <span className="text-xs text-yellow-700">{verdictSummary['partially-true']}</span>
+                                      </div>
+                                    )}
+                                    {verdictSummary.unverifiable > 0 && (
+                                      <div className="flex items-center gap-0.5 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                                        <Info className="w-3 h-3 text-gray-600" />
+                                        <span className="text-xs text-gray-700">{verdictSummary.unverifiable}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                              {turn.message}
+                            </p>
+                            
+                            {/* Inline Fact Check Results */}
+                            {isFactCheckingEnabled && turnFactChecks.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <div className="space-y-1">
+                                  {turnFactChecks.slice(0, 2).map((result, idx) => (
+                                    <div key={idx} className="flex items-start gap-2 text-xs">
+                                      {getVerdictIcon(result.verdict)}
+                                      <span className="text-gray-600">
+                                        {result.explanation.slice(0, 80)}...
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {turnFactChecks.length > 2 && (
+                                    <span className="text-xs text-gray-500 pl-6">
+                                      +{turnFactChecks.length - 2} more fact checks
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-                          {turn.message}
-                        </p>
                       </div>
+                    );
+                  })}
+                  
+                  {/* Typing Indicator */}
+                  {isGenerating && (
+                    <TypingIndicator
+                      llmName={debate.turns.length % 2 === 0 ? debate.llm1Name : debate.llm2Name}
+                      color={debate.turns.length % 2 === 0 ? 'blue' : 'red'}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Continue Button */}
+              {(debate.status === 'in_progress' || debate.status === 'active') && 
+               debate.turns.length > 0 && 
+               debate.turns.length < MAX_TURNS && 
+               !showVoting && (
+                <div className="bg-white rounded-lg shadow-sm p-6 text-center mb-6">
+                  <button
+                    onClick={continueDebate}
+                    disabled={isGenerating}
+                    className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {isGenerating ? (
+                      <span className="flex items-center">
+                        <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
+                        Generating Response...
+                      </span>
+                    ) : (
+                      `Next Turn (${debate.turns.length + 1}/${MAX_TURNS})`
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Voting Interface */}
+              {showVoting && !hasVoted && (
+                <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                  <h2 className="text-xl font-semibold mb-4">Vote for the Winner! 🗳️</h2>
+                  <p className="text-gray-600 mb-4">
+                    Which AI made the most convincing arguments?
+                  </p>
+                  
+                  <div className="space-y-3 mb-4">
+                    <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="winner"
+                        value="llm1"
+                        checked={selectedWinner === 'llm1'}
+                        onChange={(e) => setSelectedWinner(e.target.value)}
+                        className="h-4 w-4 text-blue-600"
+                      />
+                      <span className="font-medium">{debate.llm1Name}</span>
+                    </label>
+                    
+                    <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="winner"
+                        value="llm2"
+                        checked={selectedWinner === 'llm2'}
+                        onChange={(e) => setSelectedWinner(e.target.value)}
+                        className="h-4 w-4 text-red-600"
+                      />
+                      <span className="font-medium">{debate.llm2Name}</span>
+                    </label>
+                    
+                    <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="winner"
+                        value="tie"
+                        checked={selectedWinner === 'tie'}
+                        onChange={(e) => setSelectedWinner(e.target.value)}
+                        className="h-4 w-4 text-gray-600"
+                      />
+                      <span className="font-medium">It's a Tie</span>
+                    </label>
+                    
+                    <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                      <input
+                        type="radio"
+                        name="winner"
+                        value="bothBad"
+                        checked={selectedWinner === 'bothBad'}
+                        onChange={(e) => setSelectedWinner(e.target.value)}
+                        className="h-4 w-4 text-orange-600"
+                      />
+                      <span className="font-medium">Both arguments were weak 👎</span>
+                    </label>
+                  </div>
+
+                  <textarea
+                    placeholder="Why did you vote this way? (optional)"
+                    value={voteReasoning}
+                    onChange={(e) => setVoteReasoning(e.target.value)}
+                    className="w-full p-3 border rounded-lg mb-4 h-20 resize-none"
+                  />
+
+                  <button
+                    onClick={submitVote}
+                    disabled={!selectedWinner}
+                    className="w-full py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Submit Vote
+                  </button>
+                </div>
+              )}
+
+              {/* Vote Results */}
+              {hasVoted && (
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <h2 className="text-xl font-semibold mb-4">Current Results 📊</h2>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{debate.llm1Name}</span>
+                      <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full">
+                        {debate.voteCount.llm1} votes
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">{debate.llm2Name}</span>
+                      <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full">
+                        {debate.voteCount.llm2} votes
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Tie</span>
+                      <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full">
+                        {debate.voteCount.tie} votes
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Both Weak 👎</span>
+                      <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full">
+                        {debate.voteCount.bothBad || 0} votes
+                      </span>
                     </div>
                   </div>
-                )
-              })}
-              
-              {/* Typing Indicator */}
-              {isGenerating && (
-                <TypingIndicator
-                  llmName={debate.turns.length % 2 === 0 ? debate.llm1Name : debate.llm2Name}
-                  color={debate.turns.length % 2 === 0 ? 'blue' : 'red'}
-                />
+                  
+                  <div className="mt-4 pt-4 border-t">
+                    <button
+                      onClick={() => router.push('/')}
+                      className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+                    >
+                      Start Another Debate
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-          )}
 
-          {/* Generate Next Turn */}
-          {(debate.status === 'in_progress' || debate.status === 'active') && debate.turns.length > 0 && debate.turns.length < MAX_TURNS && !showVoting && (
-            <div className="bg-white rounded-lg shadow-sm p-6 text-center mb-6">
-              <button
-                onClick={continueDebate}
-                disabled={isGenerating}
-                className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50"
-              >
-                {isGenerating ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Generating Response...
-                  </span>
-                ) : (
-                  `Next Turn (${debate.turns.length + 1}/${MAX_TURNS})`
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* Voting Interface */}
-          {showVoting && !hasVoted && (
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Vote for the Winner! 🗳️</h2>
-              <p className="text-gray-600 mb-4">
-                Which AI made the most convincing arguments?
-              </p>
-              
-              <div className="space-y-3 mb-4">
-                <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="winner"
-                    value="llm1"
-                    checked={selectedWinner === 'llm1'}
-                    onChange={(e) => setSelectedWinner(e.target.value)}
-                    className="h-4 w-4 text-blue-600"
+            {/* Fact Checker Panel */}
+            {showFactChecker && isFactCheckingEnabled && debate.turns.length > 0 && (
+              <div className="lg:col-span-1">
+                <div className="sticky top-4">
+                  <FactChecker
+                    messages={factCheckerMessages}
+                    apiKey={process.env.NEXT_PUBLIC_OPENAI_API_KEY!}
+                    searchApiKey={process.env.NEXT_PUBLIC_BING_API_KEY}
+                    onFactCheckComplete={handleFactCheckComplete}
+                    className="max-h-[calc(100vh-8rem)]"
+                    autoCheckDelay={2000}
                   />
-                  <span className="font-medium">{debate.llm1Name}</span>
-                </label>
-                
-                <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="winner"
-                    value="llm2"
-                    checked={selectedWinner === 'llm2'}
-                    onChange={(e) => setSelectedWinner(e.target.value)}
-                    className="h-4 w-4 text-red-600"
-                  />
-                  <span className="font-medium">{debate.llm2Name}</span>
-                </label>
-                
-                <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="winner"
-                    value="tie"
-                    checked={selectedWinner === 'tie'}
-                    onChange={(e) => setSelectedWinner(e.target.value)}
-                    className="h-4 w-4 text-gray-600"
-                  />
-                  <span className="font-medium">It&apos;s a Tie</span>
-                </label>
-                
-                <label className="flex items-center space-x-3 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="winner"
-                    value="bothBad"
-                    checked={selectedWinner === 'bothBad'}
-                    onChange={(e) => setSelectedWinner(e.target.value)}
-                    className="h-4 w-4 text-orange-600"
-                  />
-                  <span className="font-medium">Both arguments were weak 👎</span>
-                </label>
-              </div>
-
-              <textarea
-                placeholder="Why did you vote this way? (optional)"
-                value={voteReasoning}
-                onChange={(e) => setVoteReasoning(e.target.value)}
-                className="w-full p-3 border rounded-lg mb-4 h-20 resize-none"
-              />
-
-              <button
-                onClick={submitVote}
-                disabled={!selectedWinner}
-                className="w-full py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
-              >
-                Submit Vote
-              </button>
-            </div>
-          )}
-
-          {/* Vote Results */}
-          {hasVoted && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-semibold mb-4">Current Results 📊</h2>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">{debate.llm1Name}</span>
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full">
-                    {debate.voteCount.llm1} votes
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">{debate.llm2Name}</span>
-                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full">
-                    {debate.voteCount.llm2} votes
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Tie</span>
-                  <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full">
-                    {debate.voteCount.tie} votes
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Both Weak 👎</span>
-                  <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full">
-                    {debate.voteCount.bothBad || 0} votes
-                  </span>
                 </div>
               </div>
-              
-              <div className="mt-4 pt-4 border-t">
-                <button
-                  onClick={() => router.push('/')}
-                  className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
-                >
-                  Start Another Debate
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </>
-  )
+  );
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const { id } = context.params!
+  const { id } = context.params!;
   
   try {
     const debate = await prisma.debate.findUnique({
@@ -550,12 +672,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         votes: true
       }
-    })
+    });
 
     if (!debate) {
       return {
         notFound: true
-      }
+      };
     }
 
     // Calculate vote counts
@@ -564,10 +686,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       llm2: debate.votes.filter(v => v.winner === 'llm2').length,
       tie: debate.votes.filter(v => v.winner === 'tie').length,
       bothBad: debate.votes.filter(v => v.winner === 'bothBad').length
-    }
+    };
 
     // Properly serialize all dates and omit votes
-    const { votes, ...debateWithoutVotes } = debate
+    const { votes, ...debateWithoutVotes } = debate;
     const serializedDebate = {
       ...debateWithoutVotes,
       createdAt: debate.createdAt.toISOString(),
@@ -577,17 +699,17 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         createdAt: turn.createdAt.toISOString()
       })),
       voteCount
-    }
+    };
 
     return {
       props: {
         debate: serializedDebate
       }
-    }
+    };
   } catch (error) {
-    console.error('Error fetching debate:', error)
+    console.error('Error fetching debate:', error);
     return {
       notFound: true
-    }
+    };
   }
-}
+};
