@@ -63,20 +63,6 @@ export default function DebatePage({ debate: initialDebate }: Props) {
 
   const MAX_TURNS = 6; // 3 turns per LLM
 
-  // Function to fetch latest debate data
-  const fetchDebateData = async () => {
-    try {
-      const response = await fetch(`/api/debate/${debate.id}`);
-      const data = await response.json();
-      if (data.success && data.debate) {
-        console.log('Fetched debate data:', data.debate);
-        setDebate(data.debate);
-      }
-    } catch (error) {
-      console.error('Error fetching debate data:', error);
-    }
-  };
-
   useEffect(() => {
     // Check if user has already voted
     const votedDebates = JSON.parse(sessionStorage.getItem('votedDebates') || '[]');
@@ -94,45 +80,24 @@ export default function DebatePage({ debate: initialDebate }: Props) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('debate-updated', (updatedDebate: any) => {
-      console.log('Socket: debate-updated', updatedDebate);
-      const debate = updatedDebate.debate || updatedDebate;
-      // Ensure turns array exists and filter out any invalid turns
-      if (debate && debate.turns) {
-        debate.turns = debate.turns.filter((turn: Turn) => turn && turn.id);
-        setDebate(debate);
-      } else {
-        // If data is incomplete, fetch fresh data
-        fetchDebateData();
-      }
+    socket.on('debate-updated', (updatedDebate) => {
+      setDebate(updatedDebate.debate || updatedDebate);
       setIsGenerating(false);
     });
 
-    socket.on('new-turn', (newTurn: Turn) => {
-      console.log('Socket: new-turn', newTurn);
-      // Only add the turn if it has required properties
-      if (newTurn && newTurn.id && newTurn.llmName && newTurn.message) {
-        setDebate(prev => {
-          const updatedDebate = {
-            ...prev,
-            turns: [...(prev.turns || []), newTurn]
-          };
-          console.log('Updated debate after new turn:', updatedDebate);
-          return updatedDebate;
-        });
-        
-        if (newTurn.turnNumber >= MAX_TURNS) {
-          setTimeout(() => setShowVoting(true), 1000);
-        }
-      } else {
-        // If turn data is incomplete, fetch fresh data
-        console.error('Invalid turn data received:', newTurn);
-        fetchDebateData();
-      }
+    socket.on('new-turn', (newTurn) => {
+      setDebate(prev => ({
+        ...prev,
+        turns: [...prev.turns, newTurn]
+      }));
       setIsGenerating(false);
+      
+      if (newTurn.turnNumber >= MAX_TURNS) {
+        setTimeout(() => setShowVoting(true), 1000);
+      }
     });
 
-    socket.on('vote-updated', (voteData: any) => {
+    socket.on('vote-updated', (voteData) => {
       setDebate(prev => ({
         ...prev,
         voteCount: voteData.voteCount
@@ -144,7 +109,7 @@ export default function DebatePage({ debate: initialDebate }: Props) {
       socket.off('new-turn');
       socket.off('vote-updated');
     };
-  }, [socket, debate.id]);
+  }, [socket]);
 
   // Handle fact check completion
   const handleFactCheckComplete = (result: FactCheckResult) => {
@@ -227,25 +192,13 @@ export default function DebatePage({ debate: initialDebate }: Props) {
       });
       const data = await response.json();
       
-      console.log('Start debate response:', data);
-      
       if (data.success) {
-        if (data.turn && data.turn.id && data.turn.llmName && data.turn.message) {
-          setDebate(prev => {
-            const updatedDebate = {
-              ...prev,
-              status: "in_progress",
-              turns: [data.turn]
-            };
-            console.log('Updated debate after start:', updatedDebate);
-            return updatedDebate;
-          });
-        } else if (data.debate) {
-          // If full debate object is returned
-          setDebate(data.debate);
-        } else {
-          // Fetch fresh data as fallback
-          fetchDebateData();
+        if (data.turn) {
+          setDebate(prev => ({
+            ...prev,
+            status: "in_progress",
+            turns: [data.turn]
+          }));
         }
       } else {
         alert(`Error: ${data.error}`);
@@ -272,26 +225,13 @@ export default function DebatePage({ debate: initialDebate }: Props) {
       const data = await response.json();
       
       if (data.success) {
-        // Log for debugging
-        console.log('Continue debate response:', data);
+        setDebate(prev => ({
+          ...prev,
+          turns: [...prev.turns, data.newTurn]
+        }));
         
-        if (data.newTurn && data.newTurn.id && data.newTurn.llmName && data.newTurn.message) {
-          setDebate(prev => {
-            const updatedDebate = {
-              ...prev,
-              turns: [...(prev.turns || []), data.newTurn]
-            };
-            console.log('Updated debate state:', updatedDebate);
-            return updatedDebate;
-          });
-          
-          if (debate.turns.length + 1 >= MAX_TURNS) {
-            setTimeout(() => setShowVoting(true), 1000);
-          }
-        } else {
-          console.error('Invalid turn data:', data.newTurn);
-          // Force refresh the debate data
-          fetchDebateData();
+        if (debate.turns.length + 1 >= MAX_TURNS) {
+          setTimeout(() => setShowVoting(true), 1000);
         }
       } else {
         alert(`Error: ${data.error}`);
@@ -464,7 +404,7 @@ export default function DebatePage({ debate: initialDebate }: Props) {
               {/* Debate Turns */}
               {safeTurns.length > 0 && (
                 <div className="space-y-4 mb-6">
-                  {safeTurns.map((turn) => {
+                  {safeTurns.filter(turn => turn && turn.id).map((turn) => {
                     const color = getLLMColor(turn.llmName);
                     const isLlm1 = turn.llmName === debate.llm1Name;
                     const verdictSummary = getVerdictSummary(turn.id);
